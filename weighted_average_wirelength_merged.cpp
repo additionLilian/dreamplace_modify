@@ -1,7 +1,9 @@
 #include "utility/src/torch.h"
 #include "utility/src/utils.h"
 #include "weighted_average_wirelength/src/functional.h"
-
+#include <iostream>
+#include <random>
+#include <algorithm>
 DREAMPLACE_BEGIN_NAMESPACE
 
 /// @brief Compute weighted average wirelength and gradient.
@@ -35,6 +37,16 @@ int computeWeightedAverageWirelengthMergedLauncher(
     int num_threads) {
   int chunk_size =
       DREAMPLACE_STD_NAMESPACE::max(int(num_nets / num_threads/16), 1);
+  auto rng = std::default_random_engine {};
+  int arr[num_nets];
+  for (int m = 0; m <= num_nets; m++){
+    arr[m]=m;
+  }
+  std::random_shuffle(arr,arr+num_nets);
+  int batch = 150000;
+  int newarr[batch];
+  std::copy(arr,arr+batch,newarr);
+  double balance = num_nets / batch;
   //int batch_size_pin = 50;
   //int pin_count = 0;
   //int nets_count = 0;
@@ -55,10 +67,6 @@ int computeWeightedAverageWirelengthMergedLauncher(
   //int rand_number = rand()%(nets_count);
   //int net_index[] = {net_list[rand_number], net_list[rand_number+1]};
   //int nets_size = num_nets/split;
-  double split = 0.9;
-  int batch_size = num_nets * split;
-  //int rand_start = rand()%(num_nets/10);
-  int rand_start= 0;
   //int rand_start = num_nets-nets_size;
   //int rand_start = 1000;
   //int rand_start = num_nets%4*rand_start_index;
@@ -67,10 +75,12 @@ int computeWeightedAverageWirelengthMergedLauncher(
   //int weightt = num_pins/num_pins_between;
   //int num_nets_between = net_index[1]-net_index[0];
   //int chunk_size_between = DREAMPLACE_STD_NAMESPACE::max(int(num_nets_between)%num_threads/16,1);
-#pragma omp parallel for num_threads(num_threads) schedule(dynamic, chunk_size)
 
+#pragma omp parallel for num_threads(num_threads) schedule(dynamic, chunk_size)
+  for (int n=0; n < batch; n++){
+    int i = arr[n];
   //for (int i = 0; i < num_nets; ++i){
-  for (int i = rand_start; i < rand_start + batch_size; ++i){
+  //for (int i = rand_start; i < rand_start + batch_size; ++i){
     
   //for (int i = net_index[0]; i < net_index[1]; ++i) {
     if (net_mask[i]) {
@@ -120,7 +130,7 @@ int computeWeightedAverageWirelengthMergedLauncher(
       }
 
       partial_wl[i] = (xexp_x_sum / exp_x_sum - xexp_nx_sum / exp_nx_sum +
-                      yexp_y_sum / exp_y_sum - yexp_ny_sum / exp_ny_sum) ;
+                      yexp_y_sum / exp_y_sum - yexp_ny_sum / exp_ny_sum) * balance ;
 
       T b_x = (*inv_gamma) / (exp_x_sum);
       T a_x = (1.0 - b_x * xexp_x_sum) / exp_x_sum;
