@@ -215,7 +215,7 @@ class WeightedAverageWirelengthMergedFunction(Function):
         logger.debug("wirelength backward %.3f ms" %
                      ((time.time() - tt) * 1000))
         return output, None, None, None, None, None, None, None
-
+# ++ add
 class WeightedAverageWirelengthMergedFunction2(Function):
     
     """
@@ -358,6 +358,7 @@ class WeightedAverageWirelength(nn.Module):
                 1.0 / self.gamma
                 
             )  # do not store inv_gamma as gamma is changing
+        # ++ add
         elif self.algorithm == 'merged2':
             return WeightedAverageWirelengthMergedFunction2.apply(
                 pos,
