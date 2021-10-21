@@ -310,7 +310,7 @@ class PlaceObj(nn.Module):
             result = torch.add(self.wirelength, self.density, alpha=(self.density_factor * self.density_weight).item())
 
         return result
-
+# ++ add
     def obj_fn2(self, pos):
         """
         @brief Compute objective.
@@ -341,7 +341,7 @@ class PlaceObj(nn.Module):
             result = torch.add(self.wirelength, self.density, alpha=(self.density_factor * self.density_weight).item())
 
         return result
-
+# ++ add
     def obj_and_grad_fn2(self, pos):
         """
         @brief compute objective and gradient.
@@ -450,12 +450,12 @@ class PlaceObj(nn.Module):
         if pos.grad is not None:
             pos.grad.zero_()
         obj = self.obj_fn(pos)
-        self.check_gradient(pos)
-        logging.info("density_weight is %s" %(self.density_weight))
+        #self.check_gradient(pos)
+        #logging.info("density_weight is %s" %(self.density_weight))
         obj.backward()
 
-        obj_grad = pos.grad.clone()
-        logging.info("grad is %s" %(obj_grad))
+        #obj_grad = pos.grad.clone()
+        #logging.info("grad is %s" %(obj_grad))
         self.op_collections.precondition_op(pos.grad, self.density_weight, self.update_mask)
         
         return obj, pos.grad
@@ -537,7 +537,8 @@ class PlaceObj(nn.Module):
             #logging.debug("update gamma to %g" % (wirelength_for_pin_op.gamma.data))
 
         return build_wirelength_op, build_update_gamma_op
-    
+
+    # ++ add
     def build_weighted_average_wl2(self, params, placedb, data_collections,
                                   pin_pos_op):
         """

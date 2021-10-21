@@ -14,12 +14,16 @@ import torch
 from torch.optim.optimizer import Optimizer, required
 import torch.nn as nn
 import pdb
+# ++ add
+import logging
 
 class NesterovAcceleratedGradientOptimizer(Optimizer):
     """
     @brief Follow the Nesterov's implementation of e-place algorithm 2
     http://cseweb.ucsd.edu/~jlu/papers/eplace-todaes14/paper.pdf
+
     """
+    # ++ modify obj_and_grad_fn2
     def __init__(self, params, lr=required, obj_and_grad_fn=required, obj_and_grad_fn2 = required, constraint_fn=None):
         """
         @brief initialization
@@ -47,6 +51,7 @@ class NesterovAcceleratedGradientOptimizer(Optimizer):
         super(NesterovAcceleratedGradientOptimizer, self).__init__(params, defaults)
         self.obj_and_grad_fn = obj_and_grad_fn
         self.constraint_fn = constraint_fn
+        # ++ add
         self.obj_and_grad_fn2 = obj_and_grad_fn2
         # I do not know how to get generator's length
         if len(self.param_groups) != 1:
@@ -157,8 +162,9 @@ class NesterovAcceleratedGradientOptimizer(Optimizer):
                 #p.data.copy_(v_k.data)
 
         return loss
-
+# ++ add
     def step2(self, closure=None):
+        logging.info("call step2")
         """
         @brief Performs a single optimization step.
         @param closure A callable closure function that reevaluates the model and returns the loss.

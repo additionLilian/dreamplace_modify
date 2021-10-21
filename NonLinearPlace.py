@@ -443,13 +443,13 @@ class NonLinearPlace(BasicPlace.BasicPlace):
                 last_perturb_iter = -min_perturb_interval
                 perturb_counter = 0
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++ model.Lgamma_iteration, model.Llambda_density_weight_iteration,model.Lsub_iteration 
-                for Lgamma_step in range(model.Lgamma_iteration):
+                for Lgamma_step in range(model.Lgamma_iteration*4):
                     Lgamma_metrics.append([])
                     Llambda_metrics = Lgamma_metrics[-1]
-                    for Llambda_density_weight_step in range(model.Llambda_density_weight_iteration):
+                    for Llambda_density_weight_step in range(model.Llambda_density_weight_iteration*20):
                         Llambda_metrics.append([])
                         Lsub_metrics = Llambda_metrics[-1]
-                        for Lsub_step in range(model.Lsub_iteration):
+                        for Lsub_step in range(model.Lsub_iteration*10):
                             ## divergence threshold should decrease as overflow decreases
                             ## only detect divergence when overflow is relatively low but not too low
                             if (
