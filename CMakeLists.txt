@@ -29,12 +29,18 @@ add_pytorch_extension(${TARGET_NAME}_cpp_merged
   src/weighted_average_wirelength_merged_2.cpp
   EXTRA_INCLUDE_DIRS ${INCLUDE_DIRS}
   EXTRA_LINK_LIBRARIES ${LINK_LIBS})
-
+  
+ add_pytorch_extension(${TARGET_NAME}_cpp_pin
+  src/weighted_average_wirelength_pin.cpp
+  EXTRA_INCLUDE_DIRS ${INCLUDE_DIRS}
+  EXTRA_LINK_LIBRARIES ${LINK_LIBS})
+  
 install(TARGETS 
   ${TARGET_NAME}_cpp 
   ${TARGET_NAME}_cpp_atomic 
   ${TARGET_NAME}_cpp_merged 
   ${TARGET_NAME}_cpp_merged_2
+  ${TARGET_NAME}_cpp_pin
   DESTINATION dreamplace/ops/${OP_NAME})
 
 if(TORCH_ENABLE_CUDA)
