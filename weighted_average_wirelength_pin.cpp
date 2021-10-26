@@ -160,13 +160,14 @@ int computeWeightedAverageWirelengthByPinLauncher(
   
   for (int j = newarr[0]; j< newarr[batch_size - 1]; ++j){
     int num_available_net = sizeof(pin2net_map[j])/sizeof(int);
-    int available_net[num_available_net];
-    std::copy(pin2net_map[j], pin2net_map[j]+num_available_net,available_net);
+    //std::vector<int> available_net;
+    int available_net = pin2net_map[j];
+    //std::copy(pin2net_map[j],pin2net_map[j]+num_available_net,available_net);
     T sum_m = 0;
     T grad_x = 0;
     T grady = 0;
     for (int  i = 0; i < num_available_net; i++){
-      int net_index = available_net[i];
+      int net_index = available_net;
       //T sum = 0;
       //T gradx = 0;
       //T grady = 0;

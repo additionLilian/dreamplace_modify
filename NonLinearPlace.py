@@ -98,6 +98,7 @@ class NonLinearPlace(BasicPlace.BasicPlace):
                         lr=0,
                         obj_and_grad_fn=model.obj_and_grad_fn,
                         obj_and_grad_fn2 = model.obj_and_grad_fn2,
+                        obj_and_grad_fn_pin = model.obj_and_grad_fn_pin,
                         constraint_fn=self.op_collections.move_boundary_op,
                     )
                 else:
@@ -300,9 +301,9 @@ class NonLinearPlace(BasicPlace.BasicPlace):
                         self.plot(params, placedb, iteration, cur_pos)
 
                     #### stop updating fence regions that are marked stop, exclude the outer cell !
-                    # ++
+                    # ++ add 
                     
-                    if iteration % 100 != 0:
+                    if (iteration % 10 != 0) & (iteration > 50):
                         t3 = time.time()
                         if model.update_mask is not None:
                             pos_bk = pos.data.clone()
@@ -319,8 +320,8 @@ class NonLinearPlace(BasicPlace.BasicPlace):
                         t3 = time.time()
                         if model.update_mask is not None:
                             pos_bk = pos.data.clone()
-                            optimizer.step2()
-
+                            #optimizer.step2()
+                            optimizer.step_pin()
                             for region_id, fence_region_update_flag in enumerate(model.update_mask):
                                 if fence_region_update_flag == 0:
                                 ### don't update cell location in that region
@@ -446,10 +447,10 @@ class NonLinearPlace(BasicPlace.BasicPlace):
                 for Lgamma_step in range(model.Lgamma_iteration*4):
                     Lgamma_metrics.append([])
                     Llambda_metrics = Lgamma_metrics[-1]
-                    for Llambda_density_weight_step in range(model.Llambda_density_weight_iteration*20):
+                    for Llambda_density_weight_step in range(model.Llambda_density_weight_iteration):
                         Llambda_metrics.append([])
                         Lsub_metrics = Llambda_metrics[-1]
-                        for Lsub_step in range(model.Lsub_iteration*10):
+                        for Lsub_step in range(model.Lsub_iteration):
                             ## divergence threshold should decrease as overflow decreases
                             ## only detect divergence when overflow is relatively low but not too low
                             if (

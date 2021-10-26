@@ -218,6 +218,9 @@ class PlaceObj(nn.Module):
             self.op_collections.wirelength_op2,self.op_collections.update_gamma_op2 = self.build_weighted_average_wl2(
                 params, placedb, self.data_collections,
                 self.op_collections.pin_pos_op)
+            self.op_collections.wirelength_op_pin,self.op_collections.update_gamma_op_pin = self.build_weighted_average_wl_pin(
+                params, placedb, self.data_collections,
+                self.op_collections.pin_pos_op)
 
         elif global_place_params["wirelength"] == "logsumexp":
             self.op_collections.wirelength_op, self.op_collections.update_gamma_op = self.build_logsumexp_wl(
@@ -311,6 +314,31 @@ class PlaceObj(nn.Module):
 
         return result
 # ++ add
+    def obj_fn_pin(self,pos):
+        self.wirelength = self.op_collections.wirelength_op_pin(pos)
+        if len(self.placedb.regions) > 0:
+            self.density = self.op_collections.fence_region_density_merged_op(pos)
+        else:
+            self.density = self.op_collections.density_op(pos)
+
+        self.density = self.density
+        if self.init_density is None:
+            ### record initial density
+            self.init_density = self.density.data.clone()
+            ### density weight subgradient preconditioner
+            self.density_weight_grad_precond = self.init_density.masked_scatter(self.init_density > 0, 1 /self.init_density[self.init_density > 0])
+            self.quad_penalty_coeff = self.density_quad_coeff / 2 * self.density_weight_grad_precond
+        if self.quad_penalty:
+            ### quadratic density penalty
+            self.density = self.density * (1 + self.quad_penalty_coeff * self.density)
+        if len(self.placedb.regions) > 0:
+            ### ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+            result = self.wirelength + self.density_weight.dot(self.density)
+        else:
+            result = torch.add(self.wirelength, self.density, alpha=(self.density_factor * self.density_weight).item())
+
+        return result
+
     def obj_fn2(self, pos):
         """
         @brief Compute objective.
@@ -342,6 +370,29 @@ class PlaceObj(nn.Module):
 
         return result
 # ++ add
+    def obj_and_grad_fn_pin(self, pos):
+        """
+        @brief compute objective and gradient.
+            wirelength + density_weight * density penalty
+        @param pos locations of cells
+        @return objective value
+        """
+        #++++++++++++++wo jia de ++++++++++++++++++++
+
+
+        if pos.grad is not None:
+            pos.grad.zero_()
+        obj = self.obj_fn_pin(pos)
+        self.check_gradient(pos)
+        logging.info("density_weight is %s" %(self.density_weight))
+        obj.backward()
+
+        obj_grad = pos.grad.clone()
+        logging.info("grad is %s" %(obj_grad))
+        self.op_collections.precondition_op(pos.grad, self.density_weight, self.update_mask)
+
+        return obj, pos.grad
+
     def obj_and_grad_fn2(self, pos):
         """
         @brief compute objective and gradient.
@@ -504,6 +555,9 @@ class PlaceObj(nn.Module):
 
         return (x_k - x_k_1).norm(p=2) / (g_k - g_k_1).norm(p=2)
 
+
+    # ++ add round 2
+
     def build_weighted_average_wl(self, params, placedb, data_collections,
                                   pin_pos_op):
         """
@@ -539,6 +593,28 @@ class PlaceObj(nn.Module):
         return build_wirelength_op, build_update_gamma_op
 
     # ++ add
+    def build_weighted_average_wl_pin(self, params, placedb, data_collections, pin_pos_op):
+        wirelength_for_pin_op = weighted_average_wirelength.WeightedAverageWirelength(
+            flat_netpin=data_collections.flat_net2pin_map,
+            netpin_start=data_collections.flat_net2pin_start_map,
+            pin2net_map=data_collections.pin2net_map,
+            net_weights=data_collections.net_weights,
+            net_mask=data_collections.net_mask_ignore_large_degrees,
+            pin_mask=data_collections.pin_mask_ignore_fixed_macros,
+            gamma=self.gamma,
+            algorithm='pin')
+
+        # wirelength for position
+        def build_wirelength_op(pos):
+            return wirelength_for_pin_op(pin_pos_op(pos))
+        base_gamma = self.base_gamma(params, placedb)
+
+        def build_update_gamma_op(iteration, overflow):
+            self.update_gamma(iteration, overflow, base_gamma)
+            #logging.debug("update gamma to %g" % (wirelength_for_pin_op.gamma.data))
+
+        return build_wirelength_op, build_update_gamma_op
+
     def build_weighted_average_wl2(self, params, placedb, data_collections,
                                   pin_pos_op):
         """
