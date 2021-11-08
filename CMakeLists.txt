@@ -20,6 +20,11 @@ add_pytorch_extension(${TARGET_NAME}_cpp_atomic
   EXTRA_INCLUDE_DIRS ${INCLUDE_DIRS}
   EXTRA_LINK_LIBRARIES ${LINK_LIBS})
 
+add_pytorch_extension(${TARGET_NAME}_cpp_atomic2
+  src/weighted_average_wirelength_atomic2.cpp
+  EXTRA_INCLUDE_DIRS ${INCLUDE_DIRS}
+  EXTRA_LINK_LIBRARIES ${LINK_LIBS})
+  
 add_pytorch_extension(${TARGET_NAME}_cpp_merged
   src/weighted_average_wirelength_merged.cpp
   EXTRA_INCLUDE_DIRS ${INCLUDE_DIRS}
@@ -38,6 +43,7 @@ add_pytorch_extension(${TARGET_NAME}_cpp_merged
 install(TARGETS 
   ${TARGET_NAME}_cpp 
   ${TARGET_NAME}_cpp_atomic 
+  ${TARGET_NAME}_cpp_atomic2
   ${TARGET_NAME}_cpp_merged 
   ${TARGET_NAME}_cpp_merged_2
   ${TARGET_NAME}_cpp_pin

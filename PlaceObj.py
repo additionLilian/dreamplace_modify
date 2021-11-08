@@ -189,7 +189,8 @@ class PlaceObj(nn.Module):
             self.density_weight = torch.tensor(
                 [density_weight],
                 dtype=self.data_collections.pos[0].dtype,
-                device=self.data_collections.pos[0].device)
+                device=self.data_collections.pos[0].device)     
+
         ### Note: even for multi-electric fields, they use the same gamma
         num_bins_x = global_place_params["num_bins_x"] if global_place_params[
             "num_bins_x"] else placedb.num_bins_x
@@ -290,13 +291,16 @@ class PlaceObj(nn.Module):
         @param pos locations of cells
         @return objective value
         """
+        
         self.wirelength = self.op_collections.wirelength_op(pos)
+        logging.info("wirelength is %s" %(self.wirelength))
         if len(self.placedb.regions) > 0:
             self.density = self.op_collections.fence_region_density_merged_op(pos)
         else:
             self.density = self.op_collections.density_op(pos)
 
-        self.density = self.density 
+        # self.density = self.density 
+        # result = self.wirelength
         if self.init_density is None:
             ### record initial density
             self.init_density = self.density.data.clone()
@@ -384,11 +388,9 @@ class PlaceObj(nn.Module):
             pos.grad.zero_()
         obj = self.obj_fn_pin(pos)
         self.check_gradient(pos)
-        logging.info("density_weight is %s" %(self.density_weight))
         obj.backward()
-
+        
         obj_grad = pos.grad.clone()
-        logging.info("grad is %s" %(obj_grad))
         self.op_collections.precondition_op(pos.grad, self.density_weight, self.update_mask)
 
         return obj, pos.grad
@@ -407,11 +409,11 @@ class PlaceObj(nn.Module):
             pos.grad.zero_()
         obj = self.obj_fn2(pos)
         self.check_gradient(pos)
-        logging.info("density_weight is %s" %(self.density_weight))
+
         obj.backward()
 
         obj_grad = pos.grad.clone()
-        logging.info("grad is %s" %(obj_grad))
+
         self.op_collections.precondition_op(pos.grad, self.density_weight, self.update_mask)
         
         return obj, pos.grad
@@ -497,18 +499,21 @@ class PlaceObj(nn.Module):
         """
         #++++++++++++++wo jia de ++++++++++++++++++++
         
-        
+
         if pos.grad is not None:
             pos.grad.zero_()
         obj = self.obj_fn(pos)
+        
+        
         #self.check_gradient(pos)
         #logging.info("density_weight is %s" %(self.density_weight))
         obj.backward()
-
         #obj_grad = pos.grad.clone()
         #logging.info("grad is %s" %(obj_grad))
         self.op_collections.precondition_op(pos.grad, self.density_weight, self.update_mask)
-        
+
+        # import pdb
+        # pdb.set_trace()
         return obj, pos.grad
 
     def forward(self):
@@ -533,11 +538,13 @@ class PlaceObj(nn.Module):
         density = self.density_weight * self.op_collections.density_op(pos)
         density.backward()
         density_grad = pos.grad.clone()
+        # import pdb
+        # pdb.set_trace()
         wirelength_grad_norm = wirelength_grad.norm(p=1)
         density_grad_norm = density_grad.norm(p=1)
         #+++++++++++++++++++++++++++ wo jia de +++++++++++++++++++++++++++++
-        logging.info("grad_sum = %s" %((wirelength_grad + density_grad)))
-        logging.info("density_weight is %s" %(self.density_weight))
+        #logging.info("grad_sum = %s" %((wirelength_grad + density_grad)))
+        #logging.info("density_weight is %s" %(self.density_weight))
         #logging.info("wirelength_grad norm = %.6E" % (wirelength_grad_norm))
         #logging.info("density_grad norm    = %.6E" % (density_grad_norm))
         pos.grad.zero_()
@@ -569,6 +576,15 @@ class PlaceObj(nn.Module):
         """
 
         # use WeightedAverageWirelength atomic
+        # wirelength_for_pin_op = weighted_average_wirelength.WeightedAverageWirelength(
+        #     flat_netpin=data_collections.flat_net2pin_map,
+        #     netpin_start=data_collections.flat_net2pin_start_map,
+        #     pin2net_map=data_collections.pin2net_map,
+        #     net_weights=data_collections.net_weights,
+        #     net_mask=data_collections.net_mask_ignore_large_degrees,
+        #     pin_mask=data_collections.pin_mask_ignore_fixed_macros,
+        #     gamma=self.gamma,
+        #     algorithm='merged')
         wirelength_for_pin_op = weighted_average_wirelength.WeightedAverageWirelength(
             flat_netpin=data_collections.flat_net2pin_map,
             netpin_start=data_collections.flat_net2pin_start_map,
@@ -577,10 +593,13 @@ class PlaceObj(nn.Module):
             net_mask=data_collections.net_mask_ignore_large_degrees,
             pin_mask=data_collections.pin_mask_ignore_fixed_macros,
             gamma=self.gamma,
-            algorithm='merged')
-
+            flat_node2pin_map = data_collections.flat_node2pin_map,
+            flat_node2pin_start_map = data_collections.flat_node2pin_start_map,
+            algorithm='atomic2')
+        logging.info("length of flat_node2pin_start_map is %s" %(len(data_collections.flat_node2pin_start_map)))
         # wirelength for position
         def build_wirelength_op(pos):
+            
             return wirelength_for_pin_op(pin_pos_op(pos))
 
         # update gamma
@@ -634,7 +653,7 @@ class PlaceObj(nn.Module):
             net_mask=data_collections.net_mask_ignore_large_degrees,
             pin_mask=data_collections.pin_mask_ignore_fixed_macros,
             gamma=self.gamma,
-            algorithm='merged2')
+            algorithm='atomic2')
 
         # wirelength for position
         def build_wirelength_op(pos):
@@ -977,10 +996,10 @@ class PlaceObj(nn.Module):
             self.init_density = density.data.clone()
             density.backward()
             density_grad_norm = self.data_collections.pos[0].grad.norm(p=1)
-
+### ++ modify
             grad_norm_ratio = wirelength_grad_norm / density_grad_norm
             self.density_weight = torch.tensor(
-                [params.density_weight * grad_norm_ratio],
+                [params.density_weight * grad_norm_ratio*100],
                 dtype=self.data_collections.pos[0].dtype,
                 device=self.data_collections.pos[0].device)
 
