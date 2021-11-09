@@ -11,10 +11,12 @@ from torch import nn
 from torch.autograd import Function
 import logging
 
-import dreamplace.ops.weighted_average_wirelength.weighted_average_wirelength_cpp_merged_2 as weighted_average_wirelength_cpp_merged_2
 import dreamplace.ops.weighted_average_wirelength.weighted_average_wirelength_cpp as weighted_average_wirelength_cpp
 import dreamplace.ops.weighted_average_wirelength.weighted_average_wirelength_cpp_atomic as weighted_average_wirelength_cpp_atomic
+import dreamplace.ops.weighted_average_wirelength.weighted_average_wirelength_cpp_atomic2 as weighted_average_wirelength_cpp_atomic2
 import dreamplace.ops.weighted_average_wirelength.weighted_average_wirelength_cpp_merged as weighted_average_wirelength_cpp_merged
+import dreamplace.ops.weighted_average_wirelength.weighted_average_wirelength_cpp_merged_2 as weighted_average_wirelength_cpp_merged2
+
 import dreamplace.configure as configure
 if configure.compile_configurations["CUDA_FOUND"] == "TRUE":
     import dreamplace.ops.weighted_average_wirelength.weighted_average_wirelength_cuda as weighted_average_wirelength_cuda
@@ -32,6 +34,7 @@ class WeightedAverageWirelengthFunction(Function):
     @staticmethod
     def forward(ctx, pos, flat_netpin, netpin_start, pin2net_map, net_weights,
                 net_mask, pin_mask, inv_gamma):
+        
         """
         @param pos pin location (x array, y array), not cell location
         @param flat_netpin flat netpin map, length of #pins
@@ -157,9 +160,90 @@ class WeightedAverageWirelengthAtomicFunction(Function):
                      ((time.time() - tt) * 1000))
         return output, None, None, None, None, None, None, None
 
-
-class WeightedAverageWirelengthMergedFunction(Function):
+class WeightedAverageWirelengthAtomicFunction2(Function):
+    """
+    @brief compute weighted average wirelength.
+    """
     
+    @staticmethod
+    
+    def forward(ctx, pos, pin2net_map, flat_netpin, netpin_start, net_weights,
+                net_mask, pin_mask, inv_gamma,flat_node2pin_map, flat_node2pin_start_map):
+        batch_ratio = 0.05
+        """
+        @param pos pin location (x array, y array), not cell location
+        @param pin2net_map pin2net map
+        @param net_weights weight of nets
+        @param net_mask whether to compute wirelength
+        @param pin_mask whether compute gradient for a pin, 1 means to fill with zero, 0 means to compute
+        @param inv_gamma 1/gamma, the larger, the closer to HPWL
+        """
+        
+        tt = time.time()
+        if pos.is_cuda:
+            func = weighted_average_wirelength_cuda_atomic.forward
+            output = func(pos.view(pos.numel()), pin2net_map, flat_netpin,
+                      netpin_start, net_weights, net_mask, inv_gamma)
+            
+        else:
+            func = weighted_average_wirelength_cpp_atomic2.forward
+            output = func(pos.view(pos.numel()), pin2net_map, flat_netpin,
+                      netpin_start, net_weights, net_mask, inv_gamma,flat_node2pin_map, flat_node2pin_start_map,batch_ratio)
+            logging.info("output wirelength is %s" %(len(output)))
+        ctx.pin2net_map = pin2net_map
+        ctx.flat_netpin = flat_netpin
+        ctx.netpin_start = netpin_start
+        ctx.net_weights = net_weights
+        ctx.net_mask = net_mask
+        ctx.pin_mask = pin_mask
+        ctx.inv_gamma = inv_gamma
+        ctx.exp_xy = output[1]
+        ctx.exp_nxy = output[2]
+        ctx.exp_xy_sum = output[3]
+        ctx.exp_nxy_sum = output[4]
+        ctx.xyexp_xy_sum = output[5]
+        ctx.xyexp_nxy_sum = output[6]
+        ctx.pos = pos
+        ctx.flat_node2pin_map = flat_node2pin_map
+        ctx.flat_node2pin_start_map = flat_node2pin_start_map
+        ctx.batch_ratio = batch_ratio
+        #if torch.isnan(ctx.exp_xy).any() or torch.isnan(ctx.exp_nxy).any() or torch.isnan(ctx.exp_xy_sum).any() or torch.isnan(ctx.exp_nxy_sum).any() or torch.isnan(output[0]).any():
+        #    pdb.set_trace()
+        if pos.is_cuda:
+            torch.cuda.synchronize()
+        logger.debug("wirelength forward %.3f ms" %
+                     ((time.time() - tt) * 1000))
+        return output[0]
+
+    @staticmethod
+    def backward(ctx, grad_pos):
+        batch_ratio = 0.05
+        tt = time.time()
+        if grad_pos.is_cuda:
+            func = weighted_average_wirelength_cuda_atomic.backward
+            output = func(grad_pos, ctx.pos, ctx.exp_xy.view([-1]),
+                      ctx.exp_nxy.view([-1]), ctx.exp_xy_sum.view([-1]),
+                      ctx.exp_nxy_sum.view([-1]), ctx.xyexp_xy_sum.view([-1]),
+                      ctx.xyexp_nxy_sum.view([-1]), ctx.pin2net_map,
+                      ctx.flat_netpin, ctx.netpin_start, ctx.net_weights,
+                      ctx.net_mask, ctx.inv_gamma)
+        else:
+            func = weighted_average_wirelength_cpp_atomic2.backward
+            output = func(grad_pos, ctx.pos, ctx.exp_xy.view([-1]),
+                      ctx.exp_nxy.view([-1]), ctx.exp_xy_sum.view([-1]),
+                      ctx.exp_nxy_sum.view([-1]), ctx.xyexp_xy_sum.view([-1]),
+                      ctx.xyexp_nxy_sum.view([-1]), ctx.pin2net_map,
+                      ctx.flat_netpin, ctx.netpin_start, ctx.net_weights,
+                      ctx.net_mask, ctx.inv_gamma, ctx.flat_node2pin_map, ctx.flat_node2pin_start_map, ctx.batch_ratio)
+        
+        output[:int(output.numel() // 2)].masked_fill_(ctx.pin_mask, 0.0)
+        output[int(output.numel() // 2):].masked_fill_(ctx.pin_mask, 0.0)
+        if grad_pos.is_cuda:
+            torch.cuda.synchronize()
+        logger.debug("wirelength backward %.3f ms" %
+                     ((time.time() - tt) * 1000))
+        return output, None, None, None, None, None, None, None,None,None
+class WeightedAverageWirelengthMergedFunction2(Function):
     """
     @brief compute weighted average wirelength.
     """
@@ -178,9 +262,7 @@ class WeightedAverageWirelengthMergedFunction(Function):
         if pos.is_cuda:
             func = weighted_average_wirelength_cuda_merged.forward
         else:
-            logging.info("++ call weighted_average_wirelength_cpp_merged.forward ++")
-            func = weighted_average_wirelength_cpp_merged.forward
-        
+            func = weighted_average_wirelength_cpp_merged2.forward
         output = func(pos.view(pos.numel()), flat_netpin, netpin_start,
                       pin2net_map, net_weights, net_mask, inv_gamma)
         ctx.pin2net_map = pin2net_map
@@ -215,9 +297,8 @@ class WeightedAverageWirelengthMergedFunction(Function):
         logger.debug("wirelength backward %.3f ms" %
                      ((time.time() - tt) * 1000))
         return output, None, None, None, None, None, None, None
-# ++ add
-class WeightedAverageWirelengthMergedFunction2(Function):
-    
+
+class WeightedAverageWirelengthMergedFunction(Function):
     """
     @brief compute weighted average wirelength.
     """
@@ -236,9 +317,7 @@ class WeightedAverageWirelengthMergedFunction2(Function):
         if pos.is_cuda:
             func = weighted_average_wirelength_cuda_merged.forward
         else:
-            logging.info("++ call weighted_average_wirelength_cpp_merged_2.forward ++")
-            func = weighted_average_wirelength_cpp_merged_2.forward
-        
+            func = weighted_average_wirelength_cpp_merged.forward
         output = func(pos.view(pos.numel()), flat_netpin, netpin_start,
                       pin2net_map, net_weights, net_mask, inv_gamma)
         ctx.pin2net_map = pin2net_map
@@ -262,7 +341,7 @@ class WeightedAverageWirelengthMergedFunction2(Function):
         if grad_pos.is_cuda:
             func = weighted_average_wirelength_cuda_merged.backward
         else:
-            func = weighted_average_wirelength_cpp_merged_2.backward
+            func = weighted_average_wirelength_cpp_merged.backward
         output = func(grad_pos, ctx.pos, ctx.grad_intermediate,
                       ctx.flat_netpin, ctx.netpin_start, ctx.pin2net_map,
                       ctx.net_weights, ctx.net_mask, ctx.inv_gamma)
@@ -290,6 +369,8 @@ class WeightedAverageWirelength(nn.Module):
                  net_mask=None,
                  pin_mask=None,
                  gamma=None,
+                 flat_node2pin_map = None,
+                 flat_node2pin_start_map = None,
                  algorithm='atomic'):
         """
         @brief initialization
@@ -321,6 +402,8 @@ class WeightedAverageWirelength(nn.Module):
         self.net_mask = net_mask
         self.pin_mask = pin_mask
         self.gamma = gamma
+        self.flat_node2pin_map = flat_node2pin_map
+        self.flat_node2pin_start_map = flat_node2pin_start_map
         self.algorithm = algorithm
 
     def forward(self, pos):
@@ -355,10 +438,22 @@ class WeightedAverageWirelength(nn.Module):
                 self.net_weights,
                 self.net_mask,
                 self.pin_mask,
-                1.0 / self.gamma
-                
-            )  # do not store inv_gamma as gamma is changing
-        # ++ add
+                1.0 / self.gamma  # do not store inv_gamma as gamma is changing
+            )
+        elif self.algorithm == 'atomic2':
+            logging.info("++ call atomic2")
+            return WeightedAverageWirelengthAtomicFunction2.apply(
+                pos,
+                self.pin2net_map,
+                self.flat_netpin,
+                self.netpin_start,
+                self.net_weights,
+                self.net_mask,
+                self.pin_mask,
+                1.0 / self.gamma,
+                self.flat_node2pin_map,
+                self.flat_node2pin_start_map  # do not store inv_gamma as gamma is changing
+            )
         elif self.algorithm == 'merged2':
             return WeightedAverageWirelengthMergedFunction2.apply(
                 pos,
@@ -368,5 +463,5 @@ class WeightedAverageWirelength(nn.Module):
                 self.net_weights,
                 self.net_mask,
                 self.pin_mask,
-                1.0 / self.gamma
+                1.0 / self.gamma 
             )
